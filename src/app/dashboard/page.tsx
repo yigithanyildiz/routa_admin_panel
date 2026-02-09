@@ -1,31 +1,104 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getDashboardStats } from '@/lib/firebase-service';
+import { getDashboardStats, getDestinations } from '@/lib/firebase-service';
 import { DashboardStats, Destination, PopularPlace } from '@/types';
-import { MapPin, Building2, Globe, TrendingUp, Star } from 'lucide-react';
+import { MapPin, Building2, Globe, Star } from 'lucide-react';
 import Link from 'next/link';
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    Tooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+    Legend,
+} from 'recharts';
+
+const PIE_COLORS = ['#8b5cf6', '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#a855f7'];
 
 export default function DashboardPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [allDestinations, setAllDestinations] = useState<Destination[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadStats();
+        loadData();
     }, []);
 
-    const loadStats = async () => {
+    const loadData = async () => {
         try {
-            const data = await getDashboardStats();
-            setStats(data);
+            const [statsData, destData] = await Promise.all([
+                getDashboardStats(),
+                getDestinations(),
+            ]);
+            setStats(statsData);
+            setAllDestinations(destData);
         } catch (error) {
-            console.error('Error loading stats:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
+    };
+
+    // Chart data: destinations per country
+    const countryData = useMemo(() => {
+        const countMap: Record<string, number> = {};
+        allDestinations.forEach((d) => {
+            countMap[d.country] = (countMap[d.country] || 0) + 1;
+        });
+        return Object.entries(countMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 10);
+    }, [allDestinations]);
+
+    // Chart data: climate distribution
+    const climateData = useMemo(() => {
+        const countMap: Record<string, number> = {};
+        allDestinations.forEach((d) => {
+            const climate = d.climate || 'Belirtilmemiş';
+            countMap[climate] = (countMap[climate] || 0) + 1;
+        });
+        return Object.entries(countMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+    }, [allDestinations]);
+
+    // Chart data: rating distribution
+    const ratingData = useMemo(() => {
+        const buckets = [
+            { name: '0-1', min: 0, max: 1, count: 0 },
+            { name: '1-2', min: 1, max: 2, count: 0 },
+            { name: '2-3', min: 2, max: 3, count: 0 },
+            { name: '3-4', min: 3, max: 4, count: 0 },
+            { name: '4-5', min: 4, max: 5.1, count: 0 },
+        ];
+        allDestinations.forEach((d) => {
+            if (d.rating !== undefined) {
+                const bucket = buckets.find((b) => d.rating! >= b.min && d.rating! < b.max);
+                if (bucket) bucket.count++;
+            }
+        });
+        return buckets.map((b) => ({ name: b.name, value: b.count }));
+    }, [allDestinations]);
+
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 shadow-lg">
+                    <p className="text-white font-medium">{label || payload[0].name}</p>
+                    <p className="text-purple-400 text-sm">{payload[0].value} destinasyon</p>
+                </div>
+            );
+        }
+        return null;
     };
 
     return (
@@ -64,8 +137,8 @@ export default function DashboardPage() {
                     value={
                         stats
                             ? (
-                                stats.recentDestinations.reduce((acc, d) => acc + (d.rating || 0), 0) /
-                                (stats.recentDestinations.filter((d) => d.rating).length || 1)
+                                allDestinations.reduce((acc, d) => acc + (d.rating || 0), 0) /
+                                (allDestinations.filter((d) => d.rating).length || 1)
                             ).toFixed(1)
                             : undefined
                     }
@@ -75,6 +148,146 @@ export default function DashboardPage() {
                     suffix="/ 5"
                 />
             </div>
+
+            {/* Charts Row */}
+            <div className="grid gap-6 lg:grid-cols-2">
+                {/* Country Distribution Bar Chart */}
+                <Card className="bg-slate-900/50 border-slate-800">
+                    <CardHeader>
+                        <CardTitle className="text-white">Ülkelere Göre Destinasyonlar</CardTitle>
+                        <CardDescription className="text-slate-400">
+                            En fazla destinasyona sahip ülkeler
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? (
+                            <Skeleton className="h-64 w-full bg-slate-800" />
+                        ) : countryData.length === 0 ? (
+                            <p className="text-slate-500 text-center py-12">Veri yok</p>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={countryData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                                    <XAxis
+                                        dataKey="name"
+                                        stroke="#64748b"
+                                        fontSize={12}
+                                        tickLine={false}
+                                        axisLine={false}
+                                    />
+                                    <YAxis
+                                        stroke="#64748b"
+                                        fontSize={12}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        allowDecimals={false}
+                                    />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(139, 92, 246, 0.1)' }} />
+                                    <Bar
+                                        dataKey="value"
+                                        fill="url(#barGradient)"
+                                        radius={[6, 6, 0, 0]}
+                                        maxBarSize={48}
+                                    />
+                                    <defs>
+                                        <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="#8b5cf6" />
+                                            <stop offset="100%" stopColor="#6366f1" />
+                                        </linearGradient>
+                                    </defs>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Climate Pie Chart */}
+                <Card className="bg-slate-900/50 border-slate-800">
+                    <CardHeader>
+                        <CardTitle className="text-white">İklim Dağılımı</CardTitle>
+                        <CardDescription className="text-slate-400">
+                            Destinasyonların iklim tiplerine göre dağılımı
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? (
+                            <Skeleton className="h-64 w-full bg-slate-800" />
+                        ) : climateData.length === 0 ? (
+                            <p className="text-slate-500 text-center py-12">Veri yok</p>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={280}>
+                                <PieChart>
+                                    <Pie
+                                        data={climateData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={100}
+                                        paddingAngle={3}
+                                        dataKey="value"
+                                    >
+                                        {climateData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend
+                                        wrapperStyle={{ color: '#94a3b8', fontSize: '12px' }}
+                                        iconType="circle"
+                                        iconSize={8}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Rating Chart */}
+            <Card className="bg-slate-900/50 border-slate-800">
+                <CardHeader>
+                    <CardTitle className="text-white">Rating Dağılımı</CardTitle>
+                    <CardDescription className="text-slate-400">
+                        Destinasyonların puan aralıklarına göre sayısı
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <Skeleton className="h-48 w-full bg-slate-800" />
+                    ) : (
+                        <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={ratingData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                                <XAxis
+                                    dataKey="name"
+                                    stroke="#64748b"
+                                    fontSize={12}
+                                    tickLine={false}
+                                    axisLine={false}
+                                />
+                                <YAxis
+                                    stroke="#64748b"
+                                    fontSize={12}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    allowDecimals={false}
+                                />
+                                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(245, 158, 11, 0.1)' }} />
+                                <Bar
+                                    dataKey="value"
+                                    fill="url(#ratingGradient)"
+                                    radius={[6, 6, 0, 0]}
+                                    maxBarSize={60}
+                                />
+                                <defs>
+                                    <linearGradient id="ratingGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#f59e0b" />
+                                        <stop offset="100%" stopColor="#ef4444" />
+                                    </linearGradient>
+                                </defs>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Recent Items */}
             <div className="grid gap-6 lg:grid-cols-2">

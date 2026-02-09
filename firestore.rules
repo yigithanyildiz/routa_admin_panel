@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Sadece giriş yapmış kullanıcılar okuyabilir ve yazabilir
+    // Admin email kontrolü client-side'da yapılıyor
+
+    // Cities (Destinations) collection
+    match /cities/{cityId} {
+      // Herkes okuyabilir (mobil uygulama için)
+      allow read: if true;
+
+      // Sadece giriş yapmış kullanıcılar yazabilir
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // Places collection
+    match /places/{placeId} {
+      // Herkes okuyabilir (mobil uygulama için)
+      allow read: if true;
+
+      // Sadece giriş yapmış kullanıcılar yazabilir
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // Diğer tüm collection'lar için varsayılan kural
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
