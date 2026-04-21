@@ -256,6 +256,15 @@ export default function Home() {
             >
               ⭐ ÖZEL BUTON
             </a>
+            <a
+              id="btn-blow-cake"
+              href="https://www.youtube.com/watch?v=fB0pyJ4QqQk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-3 bg-gradient-to-r from-gray-900 to-gray-700 hover:from-black hover:to-gray-600 active:from-gray-950 active:to-gray-800 text-white text-sm sm:text-base font-semibold rounded-xl border border-gray-500 hover:border-white shadow shadow-gray-900/50 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2"
+            >
+              🕯️ Pastanı Üfle
+            </a>
           </div>
         </div>
       )}
